@@ -1,0 +1,105 @@
+diff --git a/build/autoconf/arch.m4 b/build/autoconf/arch.m4
+--- a/build/autoconf/arch.m4
++++ b/build/autoconf/arch.m4
+@@ -31,7 +31,7 @@ if test -z "$MOZ_ARCH"; then
+     arm-Android)
+         MOZ_THUMB=yes
+         MOZ_ARCH=armv7-a
+-        MOZ_FPU=vfp
++        MOZ_FPU=vfpv3-d16
+         MOZ_FLOAT_ABI=softfp
+         MOZ_ALIGN=no
+         ;;
+@@ -202,8 +202,8 @@ fi
+ AC_SUBST(MOZ_THUMB2)
+ 
+ if test "$CPU_ARCH" = "arm"; then
+-  NEON_FLAGS="-mfpu=neon"
+-  AC_MSG_CHECKING(for ARM SIMD support in compiler)
++  NEON_FLAGS="-mfpu=vfpv3-d16" # It's a lie!
++  # NEON_FLAGS="-mfpu=neon" AC_MSG_CHECKING(for ARM SIMD support in compiler)
+   # We try to link so that this also fails when
+   # building with LTO.
+   AC_TRY_LINK([],
+@@ -228,19 +228,7 @@ if test "$CPU_ARCH" = "arm"; then
+                  result="yes", result="no")
+   AC_MSG_RESULT("$result")
+   if test "$result" = "yes"; then
+-      AC_DEFINE(HAVE_ARM_NEON)
+-      HAVE_ARM_NEON=1
+-
+-      dnl We don't need to build NEON support if we're targetting a non-NEON device.
+-      dnl This matches media/webrtc/trunk/webrtc/build/common.gypi.
+-      if test -n "$ARM_ARCH"; then
+-          if test "$ARM_ARCH" -lt 7; then
+-              BUILD_ARM_NEON=
+-          else
+-              AC_DEFINE(BUILD_ARM_NEON)
+-              BUILD_ARM_NEON=1
+-          fi
+-      fi
++      BUILD_ARM_NEON=
+   fi
+ 
+ fi # CPU_ARCH = arm
+diff --git a/build/gyp.mozbuild b/build/gyp.mozbuild
+--- a/build/gyp.mozbuild
++++ b/build/gyp.mozbuild
+@@ -45,9 +45,8 @@ gyp_vars.update({
+     'use_x11': 1 if CONFIG['MOZ_X11'] else 0,
+     'use_glib': 1 if CONFIG['GLIB_LIBS'] else 0,
+ 
+-     # turn off mandatory use of NEON and instead use NEON detection
+     'arm_neon': 0,
+-    'arm_neon_optional': 1,
++    'arm_neon_optional': 0,
+ 
+     'moz_widget_toolkit_gonk': 0,
+     'moz_webrtc_omx': 0,
+diff --git a/gfx/skia/moz.build b/gfx/skia/moz.build
+--- a/gfx/skia/moz.build
++++ b/gfx/skia/moz.build
+@@ -633,21 +633,13 @@ if CONFIG['INTEL_ARCHITECTURE']:
+     SOURCES['skia/src/opts/SkOpts_ssse3.cpp'].flags += skia_opt_flags
+ elif CONFIG['CPU_ARCH'] == 'arm' and CONFIG['GNU_CC']:
+     SOURCES += [
+-        'skia/src/opts/SkBitmapProcState_arm_neon.cpp',
+-        'skia/src/opts/SkBitmapProcState_matrixProcs_neon.cpp',
+         'skia/src/opts/SkBitmapProcState_opts_none.cpp',
+         'skia/src/opts/SkBlitMask_opts_arm.cpp',
+-        'skia/src/opts/SkBlitMask_opts_arm_neon.cpp',
+         'skia/src/opts/SkBlitRow_opts_arm.cpp',
+-        'skia/src/opts/SkBlitRow_opts_arm_neon.cpp',
+     ]
+-    SOURCES['skia/src/opts/SkBitmapProcState_arm_neon.cpp'].flags += skia_opt_flags
+-    SOURCES['skia/src/opts/SkBitmapProcState_matrixProcs_neon.cpp'].flags += skia_opt_flags
+     SOURCES['skia/src/opts/SkBitmapProcState_opts_none.cpp'].flags += skia_opt_flags
+     SOURCES['skia/src/opts/SkBlitMask_opts_arm.cpp'].flags += skia_opt_flags
+-    SOURCES['skia/src/opts/SkBlitMask_opts_arm_neon.cpp'].flags += skia_opt_flags
+     SOURCES['skia/src/opts/SkBlitRow_opts_arm.cpp'].flags += skia_opt_flags
+-    SOURCES['skia/src/opts/SkBlitRow_opts_arm_neon.cpp'].flags += skia_opt_flags
+ elif CONFIG['CPU_ARCH'] == 'aarch64' and CONFIG['GNU_CC']:
+     SOURCES += [
+         'skia/src/opts/SkBitmapProcState_arm_neon.cpp',
+diff --git a/media/libtheora/moz.build b/media/libtheora/moz.build
+--- a/media/libtheora/moz.build
++++ b/media/libtheora/moz.build
+@@ -89,8 +89,7 @@ if CONFIG['GNU_AS']:
+         ]
+         for var in ('OC_ARM_ASM',
+                     'OC_ARM_ASM_EDSP',
+-                    'OC_ARM_ASM_MEDIA',
+-                    'OC_ARM_ASM_NEON'):
++                    'OC_ARM_ASM_MEDIA'):
+             DEFINES[var] = True
+         # The Android NDK doesn't pre-define anything to indicate the OS it's
+         # on, so do it for them.
+@@ -109,7 +108,7 @@ if CONFIG['GNU_AS']:
+         ASFLAGS += [
+             '-march=armv7-a',
+         ]
+-        ASFLAGS += CONFIG['NEON_FLAGS']
++        ASFLAGS += ['-mfpu=neon']
+ 
+         if CONFIG['CLANG_CXX']:
+             ASFLAGS += [
